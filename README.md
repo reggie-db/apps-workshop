@@ -55,6 +55,7 @@ A dashboard that reads fuel margin data from a Databricks SQL warehouse.
 
 **Features:**
 - Auto-refresh every 60 seconds
+- URL query parameter support for sharing specific date ranges
 - Same six chart types as generated data app
 - Live connection to Databricks SQL warehouse
 - Consistent dark theme UI
@@ -63,7 +64,7 @@ A dashboard that reads fuel margin data from a Databricks SQL warehouse.
 - **Frontend**: Dash framework
 - **Database**: Databricks SQL Warehouse
 - **Data Processing**: Pandas for data manipulation
-- **Authentication**: Token-based access via HTTP headers
+- **Authentication**: Token-based access via HTTP headers when running in Databricks Apps; falls back to local `databricks` profile or environment config when running locally
 
 **Database Schema:**
 - **Catalog**: `reggie_pierce`
@@ -113,6 +114,11 @@ python sql-insert.py
 python app.py
 ```
 
+Configuration notes:
+- Set the SQL Warehouse HTTP path in `sql-data/app.py` by updating the `SQL_HTTP_PATH` constant to point to your warehouse.
+- When running inside Databricks Apps, the app uses the `x-forwarded-access-token` request header for auth automatically.
+- When running locally, ensure Databricks host and token are available via your `~/.databrickscfg` profile or environment variables supported by `databricks-sdk`.
+
 ### Deployment to Databricks
 
 Both applications include deployment configurations for Databricks Apps:
@@ -136,7 +142,6 @@ Both applications include deployment configurations for Databricks Apps:
 - `pandas` - Data manipulation
 - `databricks-sql-connector` - Database connectivity
 - `databricks-sdk` - Databricks API access
-- `pyspark` - Big data processing
 
 ## Key Features
 

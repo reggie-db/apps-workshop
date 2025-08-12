@@ -87,10 +87,8 @@ app.layout = html.Div(
         # URL location component for query params
         dcc.Location(id="url", refresh=False),
 
-        # Interval triggers once on load
-        """ 
-        dcc.Interval(id="dog-refresh", interval=1, n_intervals=0, max_intervals=1),
-        """
+        # Optional interval example (disabled):
+        # dcc.Interval(id="dog-refresh", interval=1, n_intervals=0, max_intervals=1),
         # Placeholder for dog image
         html.Div(
             html.Img(id="dog-img", style={"maxWidth": "300px", "display": "block", "margin": "auto"}),
@@ -228,14 +226,12 @@ def update_graphs(start_date, end_date):
             html.H3(f"Error generating data: {str(e)}", style={"color": "red", "textAlign": "center"})
         ])
 
-# Callback to update dog image
-""" 
-@app.callback(
-    Output("dog-img", "src"),
-    Input("dog-refresh", "n_intervals")
-)
-def load_random_dog(_):
-    return requests.get("https://dog.ceo/api/breeds/image/random").json()["message"]
- """
+# Callback to update dog image (example; requires enabling the interval above)
+# @app.callback(
+#     Output("dog-img", "src"),
+#     Input("dog-refresh", "n_intervals")
+# )
+# def load_random_dog(_):
+#     return requests.get("https://dog.ceo/api/breeds/image/random").json()["message"]
 if __name__ == "__main__":
     app.run(debug=True)
