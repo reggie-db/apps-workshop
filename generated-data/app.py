@@ -1,3 +1,10 @@
+"""Dash app: Fuel Margin Dashboard (generated data)
+
+Renders a dark-themed dashboard using synthetic timeseries data from
+helpers in `data.py`. Users select a date range, also reflected in the URL,
+and the app generates and plots multiple metrics as Plotly line charts.
+"""
+
 import dash
 from dash import dcc, html, Input, Output, State
 import plotly.graph_objs as go
@@ -20,6 +27,11 @@ default_end = "2025-05-31"
 
 # Helper for making graphs
 def make_graph(df, title):
+    """Return a `dcc.Graph` configured for a dark theme.
+
+    - If the DataFrame is empty, render a placeholder with a helpful message.
+    - Otherwise, plot each column against the index as a separate line.
+    """
     if df.empty:
         return dcc.Graph(
             figure=go.Figure(
@@ -67,6 +79,8 @@ def make_graph(df, title):
 app = dash.Dash(__name__)
 app.title = "Fuel Margin Dashboard"
 
+# Top-level layout: URL for deep-linking, optional interval, date controls,
+# and a container where graphs are injected by callback.
 app.layout = html.Div(
     style={"backgroundColor": "black", "padding": "10px"},
     children=[
@@ -131,6 +145,7 @@ app.layout = html.Div(
     Input("url", "search")
 )
 def sync_dates_from_url(search):
+    """Set date pickers based on querystring parameters when the URL changes."""
     if not search:
         return default_start, default_end
     params = parse_qs(search.lstrip("?"))
@@ -147,6 +162,7 @@ def sync_dates_from_url(search):
     prevent_initial_call=True
 )
 def update_url_params(n_clicks, start_date, end_date):
+    """Encode the current date range into the URL for deep-linking/sharing."""
     params = {"start": start_date, "end": end_date}
     return "?" + urlencode(params)
 
@@ -157,11 +173,17 @@ def update_url_params(n_clicks, start_date, end_date):
      Input("end-date-picker", "date")]
 )
 def update_graphs(start_date, end_date):
+    """Generate synthetic datasets for the selected period and render charts.
+
+    Returns empty placeholder charts if no periods exist; errors render a banner
+    instead of a stack trace.
+    """
     if start_date is None or end_date is None:
         start_date = default_start
         end_date = default_end
     
     try:
+        # Generate a 2-week cadence over the selected range
         weeks = pd.date_range(start=start_date, end=end_date, freq="2W")
         
         if len(weeks) == 0:

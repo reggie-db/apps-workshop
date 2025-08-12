@@ -1,3 +1,11 @@
+"""Dash app: Fuel Margin Dashboard
+
+Provides a dark-themed dashboard backed by Databricks SQL. Users select a
+date range which is reflected in the URL, and the app fetches several
+timeseries tables (gallons, net_margin, pricing, etc.) filtered by
+`week` to render Plotly line charts. Data auto-refreshes on an interval.
+"""
+
 import dash
 from dash import dcc, html, Input, Output, State
 import plotly.graph_objs as go
@@ -12,14 +20,25 @@ from datetime import date
 try:
     DBX_CONFIG = Config()
 except Exception:
+    # Databricks config used for local development
     DBX_CONFIG = Config(profile="E2-DOGFOOD")
+
+# TODO: Configure this via config or environment variable
+# Databricks SQL Warehouse HTTP path used for connections.
 SQL_HTTP_PATH = "/sql/1.0/warehouses/4fe75792cd0d304c"
 
 # Defaults
+# Default date range applied on first load or when URL lacks params.
 default_start = "2024-01-01"
 default_end = "2025-05-31"
 
 def connect_to_warehouse():
+    """Create a Databricks SQL connection using a bearer token.
+
+    Tries to read a user token from the `x-forwarded-access-token` header
+    (useful when running behind a reverse proxy). Falls back to the token
+    resolved by `databricks.sdk.core.Config`. Raises if no token is found.
+    """
     user_token = flask_request.headers.get("x-forwarded-access-token")
     if not user_token:
         user_token = DBX_CONFIG.token
@@ -32,6 +51,12 @@ def connect_to_warehouse():
     )
 
 def normalize_df(df):
+    """Normalize column names and index for charting.
+
+    - Lower-cases, trims, and snake_cases columns keeping only [A-Za-z0-9_].
+    - If a `week` column exists, parse it to datetime, set as index, and sort.
+    Returns the mutated DataFrame for convenience.
+    """
     df.columns = (
         df.columns.str.lower()
                   .str.strip()
@@ -45,6 +70,11 @@ def normalize_df(df):
     return df
 
 def fetch_table(table_name, start_date, end_date):
+    """Fetch a table for the given date range and return a normalized DataFrame.
+
+    Filters rows by `week BETWEEN start AND end` and orders by `week`.
+    The table is fully qualified under `reggie_pierce.apps_workshop`.
+    """
     start = pd.to_datetime(start_date).strftime("%Y-%m-%d")
     end = pd.to_datetime(end_date).strftime("%Y-%m-%d")
     query = f"""
@@ -53,12 +83,19 @@ def fetch_table(table_name, start_date, end_date):
       WHERE week BETWEEN DATE('{start}') AND DATE('{end}')
       ORDER BY week
     """
+    # For quick troubleshooting; consider moving to structured logging if needed.
     print(query)
     with connect_to_warehouse() as conn:
         df = pd.read_sql(query, conn)
     return normalize_df(df)
 
 def make_graph_component(df, title):
+    """Build a dark-themed Plotly line chart wrapped in a Dash `dcc.Graph`.
+
+    - If `df` is empty, render a placeholder with a helpful message.
+    - Otherwise, plot each column as a separate line against the datetime index.
+    Returns the `dcc.Graph` component.
+    """
     if df.empty or df.index.size == 0:
         fig = go.Figure(
             layout=go.Layout(
@@ -98,11 +135,14 @@ def make_graph_component(df, title):
 app = dash.Dash(__name__)
 app.title = "Fuel Margin Dashboard"
 
+# Top-level layout: URL for deep-linking, date pickers, update button,
+# periodic refresh, and a container where graphs are injected.
 app.layout = html.Div(
     style={"backgroundColor": "black", "padding": "10px"},
     children=[
         dcc.Location(id="url", refresh=False),
 
+        # Date range controls
         html.Div([
             html.Div([
                 html.Label("Start Date:", style={"color": "white", "marginRight": "10px", "fontWeight": "bold"}),
@@ -124,6 +164,7 @@ app.layout = html.Div(
                 ),
             ], style={"display": "inline-block", "marginRight": "30px"}),
 
+            # Explicit update button to sync URL and trigger fetches
             html.Button(
                 "Update Data",
                 id="update-button",
@@ -138,8 +179,10 @@ app.layout = html.Div(
             ),
         ], style={"textAlign": "center", "marginBottom": "30px", "padding": "20px"}),
 
+        # Periodic refresh every 60 seconds
         dcc.Interval(id="interval-loader", interval=60*1000, n_intervals=0),
 
+        # Graphs are populated by callback
         html.Div(id="graphs-container")
     ]
 )
@@ -150,6 +193,7 @@ app.layout = html.Div(
     Input("url", "search")
 )
 def sync_dates_from_url(search):
+    """Set date pickers from querystring parameters on initial load or change."""
     if not search:
         return default_start, default_end
     params = parse_qs(search.lstrip("?"))
@@ -165,6 +209,10 @@ def sync_dates_from_url(search):
     prevent_initial_call=True
 )
 def update_url_params(n_clicks, start_date, end_date):
+    """Encode current date pickers into the URL querystring.
+
+    This enables deep-linking and sharing the selected date range.
+    """
     params = {"start": start_date, "end": end_date}
     return "?" + urlencode(params)
 
@@ -175,6 +223,12 @@ def update_url_params(n_clicks, start_date, end_date):
      Input("interval-loader", "n_intervals")]
 )
 def update_graphs(start_date, end_date, _):
+    """Fetch data for all panels and render six synchronized charts.
+
+    Triggered when dates change or the interval ticks. Each table is
+    independently loaded and plotted; failures surface as a user-visible
+    error banner instead of a stack trace.
+    """
     start_date = start_date or default_start
     end_date = end_date or default_end
 
